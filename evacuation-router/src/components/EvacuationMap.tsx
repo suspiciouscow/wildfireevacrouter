@@ -63,6 +63,7 @@ export default function EvacuationMap() {
     markersRef.current = [];
   }, []);
 
+  // Initialize map
   useEffect(() => {
     if (!mapContainer.current) return;
 
@@ -73,65 +74,191 @@ export default function EvacuationMap() {
         center: [-118.2437, 34.0522], // Los Angeles coordinates
         zoom: 10
       });
-
-      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-      map.current.addControl(
-        new mapboxgl.GeolocateControl({
-          positionOptions: {
-            enableHighAccuracy: true
-          },
-          trackUserLocation: true,
-          showAccuracyCircle: true
-        })
-      );
-
-      SAFE_POINTS.forEach(point => {
-        const markerColor = point.isOpen ? '#008000' : '#808080';
-        const marker = new mapboxgl.Marker({ color: markerColor })
-          .setLngLat([point.location.lng, point.location.lat])
-          .setPopup(
-            new mapboxgl.Popup().setHTML(
-              `<div class="p-2">
-                <h3 class="font-bold">${point.name}</h3>
-                <p>Status: ${point.isOpen ? 'Open' : 'Closed'}</p>
-                ${point.capacity ? `<p>Capacity: ${point.capacity} people</p>` : ''}
-                ${point.contact?.phone ? `<p>Phone: ${point.contact.phone}</p>` : ''}
-                <p class="text-sm mt-1">Type: ${point.type}</p>
-              </div>`
-            )
-          )
-          .addTo(map.current!);
-      
-        markersRef.current.push({ marker, type: 'safe-point' });
+    
+      map.current.on('load', () => {
+        initializeMapLayers();
+        addMapControls();
+        addSafePoints();
       });
-
     } catch (err) {
       setError('Failed to initialize map');
       console.error('Map initialization error:', err);
     }
-
+    
     return () => {
       if (map.current) {
-        if (map.current.getLayer('route')) {
-          map.current.removeLayer('route');
-        }
-        if (map.current.getSource('route')) {
-          map.current.removeSource('route');
-        }
-        map.current.remove();
+        cleanup();
       }
-      clearMarkers();
     };
   }, [clearMarkers]);
+
+  const initializeMapLayers = () => {
+    if (!map.current) return;
+  
+    // Remove existing layers if they exist
+    if (map.current.getLayer('fires-heat')) {
+      map.current.removeLayer('fires-heat');
+    }
+    if (map.current.getLayer('fire-points')) {
+      map.current.removeLayer('fire-points');
+    }
+    if (map.current.getSource('fires')) {
+      map.current.removeSource('fires');
+    }
+  
+    // Add fire data source
+    map.current.addSource('fires', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: []
+      }
+    });
+  
+    // Add heatmap layer
+    map.current.addLayer({
+      id: 'fires-heat',
+      type: 'heatmap',
+      source: 'fires',
+      maxzoom: 18,
+      paint: {
+        // Increase weight based on confidence
+        'heatmap-weight': [
+          'interpolate',
+          ['linear'],
+          ['get', 'confidence'],
+          0, 0.1,
+          100, 1.5  // Increased maximum weight
+        ],
+        // Adjust intensity for better visibility
+        'heatmap-intensity': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          0, 0.5,
+          9, 2,
+          15, 3
+        ],
+        // More prominent red color scheme
+        'heatmap-color': [
+          'interpolate',
+          ['linear'],
+          ['heatmap-density'],
+          0, 'rgba(255,255,255,0)',
+          0.2, 'rgba(255,225,225,0.8)',
+          0.4, 'rgba(255,175,175,0.9)',
+          0.6, 'rgba(255,125,125,0.95)',
+          0.8, 'rgba(255,75,75,0.98)',
+          1, 'rgba(255,0,0,1)'
+        ],
+        // Increased radius for better coverage
+        'heatmap-radius': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          0, 15,    // Larger base radius
+          9, 35,    // Larger medium zoom radius
+          15, 50    // Larger maximum radius
+        ],
+        // Higher base opacity
+        'heatmap-opacity': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          7, 0.9,
+          15, 0.8
+        ]
+      }
+    });
+  
+    // Add circle layer for fire points
+    map.current.addLayer({
+      id: 'fire-points',
+      type: 'circle',
+      source: 'fires',
+      minzoom: 10,
+      paint: {
+        'circle-radius': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          10, 4,
+          15, 8
+        ],
+        'circle-color': '#ff4d4d',
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 2,
+        'circle-opacity': 0.9
+      }
+    });
+  };
+  
+  // Add map controls
+  const addMapControls = () => {
+    if (!map.current) return;
+    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.current.addControl(
+      new mapboxgl.GeolocateControl({
+        positionOptions: {
+          enableHighAccuracy: true
+        },
+        trackUserLocation: true,
+        showAccuracyCircle: true
+      })
+    );
+  };
+
+  // Add safe points to map
+  const addSafePoints = () => {
+    if (!map.current) return;
+    SAFE_POINTS.forEach(point => {
+      const markerColor = point.isOpen ? '#008000' : '#808080';
+      const marker = new mapboxgl.Marker({ color: markerColor })
+        .setLngLat([point.location.lng, point.location.lat])
+        .setPopup(
+          new mapboxgl.Popup().setHTML(
+            `<div class="p-2">
+              <h3 class="font-bold">${point.name}</h3>
+              <p>Status: ${point.isOpen ? 'Open' : 'Closed'}</p>
+              ${point.capacity ? `<p>Capacity: ${point.capacity} people</p>` : ''}
+              ${point.contact?.phone ? `<p>Phone: ${point.contact.phone}</p>` : ''}
+              <p class="text-sm mt-1">Type: ${point.type}</p>
+            </div>`
+          )
+        )
+        .addTo(map.current);
+      
+      markersRef.current.push({ marker, type: 'safe-point' });
+    });
+  };
+
+  // Cleanup function for map resources
+  const cleanup = () => {
+    if (!map.current) return;
+    if (map.current.getLayer('route')) {
+      map.current.removeLayer('route');
+    }
+    if (map.current.getSource('route')) {
+      map.current.removeSource('route');
+    }
+    map.current.remove();
+    clearMarkers();
+  };
 
   const fetchAndDisplayFires = useCallback(async () => {
     if (!map.current) return;
 
     try {
       const bounds = map.current.getBounds();
-      const fires = await EvacuationService.getActiveFires(bounds);
+      const expandedBounds = new mapboxgl.LngLatBounds(
+        [bounds.getWest() - 2.0, bounds.getSouth() - 2.0],
+        [bounds.getEast() + 2.0, bounds.getNorth() + 2.0]
+      );
+      
+      const fires = await EvacuationService.getActiveFires(expandedBounds);
       setActiveFires(fires);
 
+      // Clear existing fire markers
       markersRef.current = markersRef.current.filter(({ type, marker }) => {
         if (type === 'fire') {
           marker.remove();
@@ -140,10 +267,35 @@ export default function EvacuationMap() {
         return true;
       });
 
+      // Update heatmap data
+      if (map.current.getSource('fires')) {
+        const geoJson = {
+          type: 'FeatureCollection',
+          features: fires.filter(fire => 
+            fire && !isNaN(fire.latitude) && !isNaN(fire.longitude) &&
+            fire.latitude !== null && fire.longitude !== null
+          ).map(fire => ({
+            type: 'Feature',
+            properties: {
+              confidence: parseFloat(fire.confidence) || 50,
+              date: fire.date,
+              brightness: fire.brightness || 350
+            },
+            geometry: {
+              type: 'Point',
+              coordinates: [fire.longitude, fire.latitude]
+            }
+          }))
+        };
+
+        (map.current.getSource('fires') as mapboxgl.GeoJSONSource).setData(geoJson);
+      }
+
+      // Add individual fire markers
       fires.forEach(fire => {
         if (!isNaN(fire.longitude) && !isNaN(fire.latitude) && 
             fire.longitude !== null && fire.latitude !== null) {
-          const marker = new mapboxgl.Marker({ color: '#FFA500' })
+          const marker = new mapboxgl.Marker({ color: '#FFA500', scale: 1.0 })
             .setLngLat([fire.longitude, fire.latitude])
             .setPopup(
               new mapboxgl.Popup().setHTML(
@@ -158,36 +310,43 @@ export default function EvacuationMap() {
           markersRef.current.push({ marker, type: 'fire' });
         }
       });
-      
     } catch (err) {
       console.error('Error fetching fire data:', err);
       setError('Failed to fetch fire data');
     }
   }, []);
 
+  // Set up fire data fetching
   useEffect(() => {
-    if (userLocation) {
-      fetchAndDisplayFires();
-      const interval = setInterval(fetchAndDisplayFires, 300000);
+    if (map.current) {
+      const fetchInitialData = () => {
+        console.log('Map loaded, fetching initial fire data');
+        fetchAndDisplayFires();
+      };
+
+      map.current.on('load', fetchInitialData);
+      const interval = setInterval(fetchAndDisplayFires, 300000); // 5 minutes
+      
       return () => clearInterval(interval);
     }
-  }, [fetchAndDisplayFires, userLocation]);
+  }, [fetchAndDisplayFires]);
 
+  // Handle online/offline status
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setIsOnline(navigator.onLine);
+      
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
     }
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
   }, []);
 
   const getUserLocation = useCallback(() => {
@@ -210,6 +369,7 @@ export default function EvacuationMap() {
             zoom: 14
           });
 
+          // Update user marker
           markersRef.current = markersRef.current.filter(({ type, marker }) => {
             if (type === 'user') {
               marker.remove();
@@ -251,6 +411,7 @@ export default function EvacuationMap() {
       );
       
       if (route) {
+        // Remove existing route
         if (map.current.getLayer('route')) {
           map.current.removeLayer('route');
         }
@@ -258,6 +419,7 @@ export default function EvacuationMap() {
           map.current.removeSource('route');
         }
         
+        // Add new route
         map.current.addSource('route', {
           type: 'geojson',
           data: {
@@ -284,6 +446,7 @@ export default function EvacuationMap() {
         
         setCurrentRoute(route);
         
+        // Fit map to route bounds
         const coordinates = route.geometry.coordinates;
         const bounds = coordinates.reduce((bounds, coord) => {
           return bounds.extend(coord as [number, number]);
@@ -363,6 +526,7 @@ export default function EvacuationMap() {
         </div>
       </div>
 
+      {/* Control Buttons */}
       <div className="flex gap-4 p-4 absolute top-4 right-4 z-10">
         <button 
           onClick={getUserLocation}

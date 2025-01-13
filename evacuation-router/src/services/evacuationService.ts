@@ -2,7 +2,7 @@ import axios from 'axios';
 import { FireData, Location, RouteData, SafePoint } from '@/types';
 
 export class EvacuationService {
-  private static FIRMS_API_URL = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/';
+  private static FIRMS_API_URL = 'https://firms.modaps.eosdis.nasa.gov/api/area';
   private static MAPBOX_DIRECTIONS_URL = 'https://api.mapbox.com/directions/v5/mapbox/driving/';
   
   static async getActiveFires(bounds: mapboxgl.LngLatBounds): Promise<FireData[]> {
@@ -14,28 +14,34 @@ export class EvacuationService {
     }
     
     try {
-      const response = await axios.get(
-        `${this.FIRMS_API_URL}/${apiKey}/MODIS_NRT/world/${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}/1`
-      );
+      // Use VIIRS data for higher resolution
+      const url = `${this.FIRMS_API_URL}/${apiKey}/VIIRS_SNPP_NRT/${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}/1/`;
+      const response = await axios.get(url);
       
-      // Parse and validate the data
+      if (!response.data || !Array.isArray(response.data)) {
+        return [];
+      }
+  
       return response.data
-        .filter((fire: any) => (
-          typeof fire.latitude === 'number' && !isNaN(fire.latitude) &&
-          typeof fire.longitude === 'number' && !isNaN(fire.longitude)
-        ))
+        .filter((fire: any) => 
+          fire.latitude && 
+          fire.longitude && 
+          !isNaN(fire.latitude) && 
+          !isNaN(fire.longitude)
+        )
         .map((fire: any) => ({
           latitude: Number(fire.latitude),
           longitude: Number(fire.longitude),
-          confidence: String(fire.confidence || ''),
-          date: String(fire.date || new Date().toISOString())
+          confidence: String(fire.confidence || '50'),
+          date: fire.acq_date || new Date().toISOString(),
+          brightness: fire.bright_ti4 || 350
         }));
+  
     } catch (error) {
       console.error('Error fetching fire data:', error);
       return [];
     }
   }
-
   private static parseFireData(csvData: string): FireData[] {
     // Split CSV into lines and remove header
     const lines = csvData.split('\n');
