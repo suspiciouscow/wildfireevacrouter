@@ -15,5 +15,27 @@ The LA Fire Evacuation Router is a real-time emergency response tool that helps 
 
 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/la-fire-evacuation
-cd la-fire-evacuation
+git clone https://github.com/yourusername/wildfireevacrouter
+cd wildfireevacrouter
+
+```
+
+2. Add environment variables in (both are free) `.env.local`:
+```env
+NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
+NEXT_PUBLIC_NASA_FIRMS_KEY=your_nasa_firms_key
+```
+
+3. Run development server:
+```bash
+npm run dev
+```
+
+## Stack
+
+- Next.js
+- TypeScript
+- Mapbox GL JS
+- NASA FIRMS API
+- Tailwind CSS
+
