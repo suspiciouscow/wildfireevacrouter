@@ -1,0 +1,1 @@
+This wildfire evacuation router is a real-time emergency response tool that helps residents find the safest route to nearby shelters during the LA wildfire emergency by displaying active fires, emergency shelters, and calculating evacuation routes that avoid dangerous areas.
