@@ -2,8 +2,9 @@ import axios from 'axios';
 import { FireData, Location, RouteData, SafePoint } from '@/types';
 
 export class EvacuationService {
-  private static FIRMS_API_URL = 'https://firms.modaps.eosdis.nasa.gov/api/area';
+  private static FIRMS_API_URL = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv';
   private static MAPBOX_DIRECTIONS_URL = 'https://api.mapbox.com/directions/v5/mapbox/driving/';
+  
   
   static async getActiveFires(bounds: mapboxgl.LngLatBounds): Promise<FireData[]> {
     const apiKey = process.env.NEXT_PUBLIC_NASA_FIRMS_KEY;
